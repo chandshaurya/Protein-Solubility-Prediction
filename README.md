@@ -422,4 +422,6 @@ When redistributing the dataset or derivative data, follow the archive's current
 
 ## License
 
-This README does not assert a software license. If the repository does not contain a separate `LICENSE` file, add an appropriate license before inviting reuse. The eSOL data license is separate from the software license.
+This project’s source code is licensed under the [MIT License](LICENSE).
+
+You are free to use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the software, subject to the terms and conditions of the MIT License.
