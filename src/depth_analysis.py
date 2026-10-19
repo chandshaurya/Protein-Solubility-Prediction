@@ -7,6 +7,8 @@ import seaborn as sns
 import joblib
 import shap
 
+from sklearn.base import clone
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import NearestNeighbors
 from sklearn.inspection import permutation_importance
@@ -16,42 +18,168 @@ SHAP_BACKGROUND_SIZE = 20
 SHAP_SAMPLE_SIZE = 25
 
 
-def _build_experiments():
-    dataset_path = PROJECT_ROOT / "data" / "processed" / "esol_advanced_features.csv"
-    feature_columns = []
-    if dataset_path.exists():
-        df = pd.read_csv(dataset_path)
-        exclude = {"JW_ID", "gene", "locus", "Solubility (%)", "sequence", "Sequence", "accession",
-                   "description", "cell_location", "gene_product_type", "gene_product_type"}
-        feature_columns = [
-            col for col in df.columns if col not in exclude and isinstance(col, str)
-        ]
-    else:
-        feature_columns = [
-            "mw_kda_reported", "pi_reported", "length", "gravy", "aromaticity",
-            "instability_index", "aac_A", "aac_C", "aac_D", "aac_E", "aac_F",
-            "aac_G", "aac_H", "aac_I", "aac_K", "aac_L", "aac_M", "aac_N",
-            "aac_P", "aac_Q", "aac_R", "aac_S", "aac_T", "aac_V", "aac_W",
-            "aac_Y"
-        ]
-
-    aac_features = [col for col in feature_columns if str(col).startswith("aac_")]
+def build_experiments(feature_columns):
+    feature_columns = list(feature_columns)
+    feature_set = set(feature_columns)
+    reported_features = [
+        col for col in ("mw_kda_reported", "pi_reported") if col in feature_set
+    ]
+    sequence_summary_features = [
+        col for col in (
+            "seq_length",
+            "log_seq_length",
+            "gravy_score",
+            "net_charge_density",
+            "hydrophobic_std",
+        ) if col in feature_set
+    ]
+    aac_features = [col for col in feature_columns if col.startswith("aac_")]
+    ablation_groups = {
+        "E5": reported_features,
+        "E6": sequence_summary_features,
+        "E7": aac_features,
+    }
     return {
         "E0": [],
-        "E1": ["mw_kda_reported", "pi_reported"],
-        "E2": ["length", "gravy", "aromaticity", "instability_index"],
-        "E3": aac_features if aac_features else ["aac_A", "aac_C"],
+        "E1": reported_features,
+        "E2": sequence_summary_features,
+        "E3": aac_features,
         "E4": feature_columns,
+        "E5": [col for col in feature_columns if col not in ablation_groups["E5"]],
+        "E6": [col for col in feature_columns if col not in ablation_groups["E6"]],
+        "E7": [col for col in feature_columns if col not in ablation_groups["E7"]],
     }
 
 
+def _build_experiments():
+    dataset_path = PROJECT_ROOT / "data" / "processed" / "esol_advanced_features.csv"
+    if dataset_path.exists():
+        sample = pd.read_csv(dataset_path, nrows=1)
+        exclude = {
+            "JW_ID", "gene", "locus", "Solubility (%)", "sequence", "Sequence",
+            "accession", "description", "cell_location", "gene_product_type",
+        }
+        feature_columns = [
+            col for col in sample.select_dtypes(include=[np.number]).columns
+            if col not in exclude
+        ]
+    else:
+        feature_columns = [
+            "mw_kda_reported", "pi_reported", "seq_length", "log_seq_length",
+            "gravy_score", "net_charge_density", "hydrophobic_std", "aac_A",
+        ]
+    return build_experiments(feature_columns)
+
+
 EXPERIMENTS = _build_experiments()
+
 
 def apply_target_denoising(X, y, n_neighbors=5):
     nn = NearestNeighbors(n_neighbors=n_neighbors, metric='minkowski')
     nn.fit(X)
     _, indices = nn.kneighbors(X)
     return np.mean(y.values[indices], axis=1)
+
+
+def bootstrap_rmse_interval(y_true, y_pred, n_bootstrap=1000, random_state=42):
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    if y_true.size == 0 or y_true.shape != y_pred.shape:
+        raise ValueError("y_true and y_pred must have the same non-zero shape.")
+    if n_bootstrap < 1:
+        raise ValueError("n_bootstrap must be at least 1.")
+
+    errors = np.square(y_true - y_pred)
+    rng = np.random.default_rng(random_state)
+    sample_indices = rng.integers(
+        0, errors.size, size=(n_bootstrap, errors.size)
+    )
+    bootstrap_rmse = np.sqrt(errors[sample_indices].mean(axis=1))
+    lower, upper = np.quantile(bootstrap_rmse, [0.025, 0.975])
+    return float(lower), float(upper)
+
+
+def run_feature_ablation(df, feature_names, model, test_size=0.15, random_state=42):
+    experiments = build_experiments(feature_names)
+    if not experiments["E1"] or not experiments["E2"] or not experiments["E3"]:
+        raise ValueError("Dataset is missing one or more required ablation feature groups.")
+
+    X = df[feature_names].apply(pd.to_numeric, errors="raise")
+    y = df["Solubility (%)"].to_numpy()
+    train_indices, test_indices = train_test_split(
+        np.arange(len(df)), test_size=test_size, random_state=random_state
+    )
+    X_train = X.iloc[train_indices]
+    X_test = X.iloc[test_indices]
+    y_train = y[train_indices]
+    y_test = y[test_indices]
+
+    medians = X_train.median().fillna(0.0)
+    X_train = X_train.fillna(medians)
+    X_test = X_test.fillna(medians)
+
+    predictions = {
+        "E0": np.full(y_test.shape, y_train.mean(), dtype=float),
+    }
+    for experiment_name in ("E1", "E2", "E3", "E4", "E5", "E6", "E7"):
+        selected_features = experiments[experiment_name]
+        estimator = clone(model)
+        estimator.fit(X_train[selected_features], y_train)
+        predictions[experiment_name] = np.clip(
+            estimator.predict(X_test[selected_features]), 0.0, 100.0
+        )
+
+    full_rmse = np.sqrt(mean_squared_error(y_test, predictions["E4"]))
+    rows = []
+    for experiment_name, y_pred in predictions.items():
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        lower, upper = bootstrap_rmse_interval(
+            y_test, y_pred, random_state=random_state
+        )
+        rows.append({
+            "Experiment": experiment_name,
+            "Feature_Group": {
+                "E0": "Mean-only baseline",
+                "E1": "Reported molecular properties",
+                "E2": "Sequence summary properties",
+                "E3": "Amino-acid composition",
+                "E4": "All available features",
+                "E5": "All except reported properties",
+                "E6": "All except sequence summaries",
+                "E7": "All except amino-acid composition",
+            }[experiment_name],
+            "Feature_Count": len(experiments[experiment_name]),
+            "R2": r2_score(y_test, y_pred),
+            "RMSE": rmse,
+            "RMSE_CI_95_Lower": lower,
+            "RMSE_CI_95_Upper": upper,
+            "MAE": mean_absolute_error(y_test, y_pred),
+            "RMSE_Delta_vs_All": rmse - full_rmse,
+        })
+    return pd.DataFrame(rows)
+
+
+def _save_ablation_plot(ablation, figures_dir):
+    ordered = ablation.sort_values("RMSE", ascending=True)
+    lower_error = ordered["RMSE"] - ordered["RMSE_CI_95_Lower"]
+    upper_error = ordered["RMSE_CI_95_Upper"] - ordered["RMSE"]
+
+    plt.figure(figsize=(8, 4.5))
+    plt.barh(ordered["Feature_Group"], ordered["RMSE"], color="teal")
+    plt.errorbar(
+        ordered["RMSE"],
+        ordered["Feature_Group"],
+        xerr=[lower_error, upper_error],
+        fmt="none",
+        ecolor="black",
+        capsize=3,
+    )
+    plt.xlabel("Test RMSE (percentage points; 95% bootstrap interval)")
+    plt.title("Feature-family ablation on the raw-solubility holdout")
+    plt.tight_layout()
+    plt.savefig(figures_dir / "feature_ablation_rmse.png", dpi=300)
+    plt.close()
+
 
 def run_depth_analysis():
     print("Running In-Depth Error, Feature Importance & Biological Analysis...")
@@ -92,6 +220,13 @@ def run_depth_analysis():
     figures_dir = PROJECT_ROOT / "results" / "figures"
     tables_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use measured targets and train-only imputation for a leakage-conscious ablation.
+    print("Running raw-target feature-family ablation...")
+    ablation = run_feature_ablation(df, feature_names, model)
+    ablation.to_csv(tables_dir / "feature_ablation.csv", index=False)
+    _save_ablation_plot(ablation, figures_dir)
+    print("Saved feature-family ablation table and RMSE plot.")
     
     # 1. Top High Error Cases
     top_errors = df_test.sort_values(by="Absolute_Error", ascending=False).head(10)
