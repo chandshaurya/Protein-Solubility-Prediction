@@ -239,9 +239,26 @@ elif menu == "Evaluation & Depth Analysis":
         st.dataframe(err_df, use_container_width=True)
     else:
         st.info("Run `python src/depth_analysis.py` to generate the top high-error case inspection table.")
+
+    st.markdown("---")
+    st.markdown("### 5. Feature-family Ablation & Metric Uncertainty")
+    ablation_path = "results/tables/feature_ablation.csv"
+    ablation_fig = "results/figures/feature_ablation_rmse.png"
+    st.markdown(
+        "Feature-family-only and leave-one-family-out models are evaluated on "
+        "the same fixed holdout using measured solubility targets. RMSE "
+        "intervals bootstrap the same holdout proteins across models; they "
+        "describe test-sample uncertainty, not causal feature effects."
+    )
+    if os.path.exists(ablation_path):
+        st.dataframe(pd.read_csv(ablation_path), use_container_width=True)
+        if os.path.exists(ablation_fig):
+            st.image(ablation_fig, use_container_width=True)
+    else:
+        st.info("Run `python src/depth_analysis.py` to generate the feature-family ablation.")
         
-    # --- 5. GRAVY STRATIFICATION PLOT ---
+    # --- 6. GRAVY STRATIFICATION PLOT ---
     gravy_fig = "results/figures/gravy_vs_solubility.png"
     if os.path.exists(gravy_fig):
-        st.markdown("### 5. Hydropathy (GRAVY) Stratification")
+        st.markdown("### 6. Hydropathy (GRAVY) Stratification")
         st.image(gravy_fig, caption="GRAVY Score vs Consensus Solubility Stratification Across Predictions", use_container_width=True)
