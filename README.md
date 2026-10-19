@@ -85,7 +85,7 @@ UniProt FASTA ──────┘                                      │
 │   ├── features.py                       Sequence feature calculation
 │   ├── train.py                          Baseline comparison and candidate training
 │   ├── evaluate.py                       Holdout metrics and diagnostic plots
-│   ├── depth_analysis.py                 Error, permutation, and SHAP analysis
+│   ├── depth_analysis.py                 Error, ablation, permutation, and SHAP analysis
 │   └── predict.py                        Python inference API
 ├── tests/
 │   └── test_experiment_design.py          Checks declared feature groups
@@ -415,6 +415,13 @@ This script is rooted at the project directory when resolving its input and
 output paths and performs the following analysis:
 
 - Saves `results/tables/top_10_high_error_cases.csv`.
+- Trains reported-property, sequence-summary, amino-acid-composition,
+  all-feature, and leave-one-feature-family-out models on the same fixed
+  holdout using measured solubility targets. It saves their metrics and a
+  mean-only baseline to
+  `results/tables/feature_ablation.csv`.
+- Adds a 95% bootstrap interval for each holdout RMSE and saves the comparison
+  plot to `results/figures/feature_ablation_rmse.png`.
 - Calculates permutation feature importance and saves the top-feature plot to
   `results/figures/feature_importance.png`.
 - Uses SHAP’s permutation explainer to calculate global attributions for a
@@ -423,6 +430,16 @@ output paths and performs the following analysis:
   `results/figures/shap_summary_plot.png`.
 - Saves `results/figures/gravy_vs_solubility.png` when `gravy_score` is
   present.
+
+The feature-family ablation is reported separately from the saved candidate
+score. It uses measured `Solubility (%)` values rather than the
+nearest-neighbor-smoothed training targets, applies one deterministic 85/15
+holdout to every experiment, and learns missing-value medians from training
+rows only. RMSE intervals bootstrap the held-out proteins with predictions
+held fixed; they quantify sampling variability on this holdout, not
+model-training uncertainty. The feature comparisons are predictive
+associations, not evidence that changing a feature causes a change in
+solubility.
 
 SHAP is model-agnostic here because the current candidate is a histogram
 gradient boosting estimator. With hundreds of input features, permutation
@@ -454,10 +471,10 @@ Run the available test suite from the project root:
 python -m pytest -q
 ```
 
-The current test verifies that the declared feature experiment groups in
-`src/depth_analysis.py` contain the expected feature categories. It is a
-focused structural test, not a full end-to-end test of data rebuilding,
-training, evaluation, or the Streamlit interface.
+The focused tests verify that feature-family and leave-one-family-out groups
+match the available feature names, and that the bootstrap RMSE interval
+calculation behaves as expected. They are not a full end-to-end test of data
+rebuilding, model training, evaluation, or the Streamlit interface.
 
 ## Important workflow and scientific caveats
 
