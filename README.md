@@ -303,7 +303,8 @@ Official dataset: eSOL at LSDB Archive
 Data license: Official eSOL license page
 
 When redistributing the dataset or derivative data, follow the archive's current attribution and share-alike requirements. Cite the data source separately from this software project.
-## License
+
+License
 
 This project’s source code is licensed under the [MIT License](LICENSE).
 
