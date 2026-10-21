@@ -10,10 +10,7 @@ import sys
 # Ensure project root directory is in Python path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-try:
-    from src.predict import SolubilityPredictor
-except ModuleNotFoundError:
-    from predict import SolubilityPredictor
+from src.predict import SolubilityPredictor
 
 st.set_page_config(
     page_title="Protein Solubility ML Platform",
