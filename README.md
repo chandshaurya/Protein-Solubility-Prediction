@@ -87,7 +87,6 @@ UniProt-style FASTA ───┘
 │   └── processed/
 │       ├── desol_cleaned.csv
 │       ├── esol_cleaned.csv
-│       ├── esol_with_sequences.csv
 │       └── esol_advanced_features.csv
 ├── models/best_model.joblib
 ├── results/
@@ -116,7 +115,6 @@ The project uses the [official eSOL solubility dataset](https://dbarchive.biosci
 | `data/raw/esol.csv` | Raw eSOL measurements and annotations |
 | `data/raw/idmapping.fasta` | UniProt-style FASTA used for gene mapping |
 | `data/processed/desol_cleaned.csv` | Cleaned eSOL rows before sequence merge |
-| `data/processed/esol_cleaned.csv` | Cleaned rows with mapped sequences when available |
 | `data/processed/esol_with_sequences.csv` | Normalized sequence table; target named `solubility` |
 | `data/processed/esol_advanced_features.csv` | Model-ready table; target expected as `Solubility (%)` |
 
