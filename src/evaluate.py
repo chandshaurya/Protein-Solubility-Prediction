@@ -77,7 +77,7 @@ def evaluate_pipeline():
             "RMSE": round(rmse, 3),
             "MAE": round(mae, 3),
             "Accuracy": f"{acc * 100:.2f}%",
-            "F1_Score": round(f1, 3),
+            "F1_Score": round(float(f1), 3),
             "ROC_AUC": round(roc_auc, 3)
         }
         
@@ -140,8 +140,8 @@ def evaluate_pipeline():
     plt.plot(fpr_b, tpr_b, color="gray", linestyle=":", lw=2, label=f"Ridge (AUC = {metrics_base['ROC_AUC']})")
     plt.plot(fpr_c, tpr_c, color="darkorange", lw=2, label=f"HistGradBoost (AUC = {metrics_cand['ROC_AUC']})")
     plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--", label="Random Classifier")
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
+    plt.xlim((0.0, 1.0))
+    plt.ylim((0.0, 1.05))
     plt.xlabel("False Positive Rate", fontsize=12)
     plt.ylabel("True Positive Rate", fontsize=12)
     plt.title("Comparative ROC Curve", fontsize=14)
