@@ -110,8 +110,12 @@ def is_valid_sequence(seq: Optional[str]) -> bool:
 
 def merge_sequences(esol_df: pd.DataFrame, fasta_map: Dict[str, dict]) -> pd.DataFrame:
     df = esol_df.copy()
-    df["sequence"] = df["gene"].map(lambda g: fasta_map.get(g, {}).get("sequence"))
-    df["accession"] = df["gene"].map(lambda g: fasta_map.get(g, {}).get("accession"))
+    df["sequence"] = df["gene"].map(
+        lambda g: fasta_map.get(g, {}).get("sequence") if isinstance(g, str) else None
+    )
+    df["accession"] = df["gene"].map(
+        lambda g: fasta_map.get(g, {}).get("accession") if isinstance(g, str) else None
+    )
 
     df["seq_valid"] = df["sequence"].apply(is_valid_sequence)
     df = df[df["seq_valid"]].drop(columns="seq_valid").reset_index(drop=True)
